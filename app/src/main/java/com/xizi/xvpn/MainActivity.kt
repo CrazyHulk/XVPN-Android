@@ -1,18 +1,17 @@
 package com.xizi.xvpn
 
+import android.app.PendingIntent
+import android.content.Intent
 import android.net.VpnService
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
-import android.text.TextUtils
 import android.util.Log
 import android.widget.Button
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.PrintWriter
+import java.io.*
 import java.lang.Exception
 import java.net.Socket
-import java.nio.ByteBuffer
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -43,9 +42,45 @@ class MainActivity : AppCompatActivity() {
                 w.flush()
 //                var buffer = ByteBuffer.allocate(4)
 //                buffer.putInt(Prefs.IPLoop)
-                var buf = ByteArray(1500)
-                var count = r.read(buf, 0, 16)
-                print(buf)
+//                var buf = ByteArray(1500)
+//                var count = r.read(buf, 0, 16)
+
+                // vpn configration
+                var service = VpnService()
+                var builder = service.Builder()
+                builder.addAddress("10.0.0.9", 32)
+                builder.addRoute("0.0.0.0",0)
+                builder.setMtu(1500)
+                builder.addDnsServer("8.8.8.8")
+                builder.addSearchDomain("127.0.0.1")
+                // Create the intent to "configure" the connection (just start VpnClient.kt).
+                var intent = VpnService.prepare(applicationContext)
+                startActivityForResult(intent,0)
+                startService(intent)
+
+                var pendingIntent = PendingIntent.getActivity(
+                    this,
+                    0,
+                    Intent(this, VpnClient::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                builder.setSession("XVPN").setConfigureIntent(pendingIntent)
+
+
+
+                Log.i("tag", "($intent)")
+                print("fffffff1111")
+                print(intent)
+                var vpnInterface: ParcelFileDescriptor = builder.establish()
+
+                // Packets to be sent are queued in this input stream.
+                val `in` = FileInputStream(vpnInterface!!.getFileDescriptor())
+
+                // Packets received need to be written to this output stream.
+                val out = FileOutputStream(vpnInterface!!.getFileDescriptor())
+                while (true) {
+                    print(`in`.readBytes())
+                }
             } catch (e: Exception) {
                 print(e)
             }
@@ -53,6 +88,13 @@ class MainActivity : AppCompatActivity() {
 
 
         return
+    }
+
+    override fun startActivityForResult(intent: Intent?, requestCode: Int) {
+        if (intent == null) {
+            super.startActivityForResult(Intent(), requestCode)
+        }
+        super.startActivityForResult(intent, requestCode)
     }
 
 
