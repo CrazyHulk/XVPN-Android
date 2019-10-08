@@ -155,7 +155,7 @@ class VpnService : VpnService(), Handler.Callback {
     companion object {
         private val TAG = VpnService::class.java!!.getSimpleName()
 
-        val ACTION_CONNECT = "com.example.android.toyvpn.START"
-        val ACTION_DISCONNECT = "com.example.android.toyvpn.STOP"
+        val ACTION_CONNECT = "com.xizi.xvpn.START"
+        val ACTION_DISCONNECT = "com.xizi.xvpn.STOP"
     }
 }

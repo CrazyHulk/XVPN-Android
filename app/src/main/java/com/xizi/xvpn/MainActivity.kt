@@ -8,9 +8,12 @@ import android.os.Bundle
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.widget.Button
+import androidx.core.content.ContextCompat
 import java.io.*
 import java.lang.Exception
 import java.net.Socket
+import java.security.Permission
+import java.util.jar.Manifest
 
 
 class MainActivity : AppCompatActivity() {
@@ -39,7 +42,10 @@ class MainActivity : AppCompatActivity() {
                 var r = socket!!.getInputStream()
                 var w = socket!!.getOutputStream()
                 w.write(int32ByteArray(Prefs.IPLoop))
+                // tcp 写入示例
+                // w.write("hello world".toByteArray())
                 w.flush()
+                // tcp 读取
 //                var buffer = ByteBuffer.allocate(4)
 //                buffer.putInt(Prefs.IPLoop)
 //                var buf = ByteArray(1500)
@@ -54,17 +60,20 @@ class MainActivity : AppCompatActivity() {
                 builder.addDnsServer("8.8.8.8")
                 builder.addSearchDomain("127.0.0.1")
                 // Create the intent to "configure" the connection (just start VpnClient.kt).
-                var intent = VpnService.prepare(applicationContext)
-                startActivityForResult(intent,0)
-                startService(intent)
+//                ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CALENDAR)
+//                var intent = VpnService.prepare(applicationContext)
+//
+//                startActivityForResult(intent, 0)
+//                startService(intent)
 
-                var pendingIntent = PendingIntent.getActivity(
-                    this,
-                    0,
-                    Intent(this, VpnClient::class.java),
-                    PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                builder.setSession("XVPN").setConfigureIntent(pendingIntent)
+
+//                var pendingIntent = PendingIntent.getActivity(
+//                    this,
+//                    0,
+//                    Intent(this, VpnClient::class.java),
+//                    PendingIntent.FLAG_UPDATE_CURRENT
+//                )
+//                builder.setSession("XVPN").setConfigureIntent(pendingIntent)
 
 
 
@@ -93,6 +102,7 @@ class MainActivity : AppCompatActivity() {
     override fun startActivityForResult(intent: Intent?, requestCode: Int) {
         if (intent == null) {
             super.startActivityForResult(Intent(), requestCode)
+            return
         }
         super.startActivityForResult(intent, requestCode)
     }
