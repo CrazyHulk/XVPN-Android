@@ -1,8 +1,11 @@
 package com.xizi.xvpn
 
+import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Intent
-import android.net.VpnService
+import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.ParcelFileDescriptor
@@ -14,13 +17,18 @@ import java.lang.Exception
 import java.net.Socket
 import java.security.Permission
 import java.util.jar.Manifest
+import android.net.VpnService
+import androidx.core.app.ComponentActivity.ExtraData
+import androidx.core.content.ContextCompat.getSystemService
+import android.icu.lang.UCharacter.GraphemeClusterBreak.T
 
 
-class MainActivity : AppCompatActivity() {
+
+
+class MainActivity : Activity() {
 
     private lateinit var button: Button
 
-    var socket: Socket? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,83 +36,24 @@ class MainActivity : AppCompatActivity() {
 
         button = findViewById(R.id.button)
         button.setOnClickListener {
-            createTcpConnection()
-        }
-    }
-
-    fun createTcpConnection() {
-        Thread {
-            try {
-                socket = Socket("10.23.103.134", 8080)
-//                socket = Socket("35.236.153.210", 8080)
-//                var reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
-//                var writer = PrintWriter(socket!!.getOutputStream())
-                var r = socket!!.getInputStream()
-                var w = socket!!.getOutputStream()
-                w.write(int32ByteArray(Prefs.IPLoop))
-                // tcp 写入示例
-                // w.write("hello world".toByteArray())
-                w.flush()
-                // tcp 读取
-//                var buffer = ByteBuffer.allocate(4)
-//                buffer.putInt(Prefs.IPLoop)
-//                var buf = ByteArray(1500)
-//                var count = r.read(buf, 0, 16)
-
-                // vpn configration
-                var service = VpnService()
-                var builder = service.Builder()
-                builder.addAddress("10.0.0.9", 32)
-                builder.addRoute("0.0.0.0",0)
-                builder.setMtu(1500)
-                builder.addDnsServer("8.8.8.8")
-                builder.addSearchDomain("127.0.0.1")
-                // Create the intent to "configure" the connection (just start VpnClient.kt).
-//                ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CALENDAR)
-//                var intent = VpnService.prepare(applicationContext)
-//
-//                startActivityForResult(intent, 0)
-//                startService(intent)
-
-
-//                var pendingIntent = PendingIntent.getActivity(
-//                    this,
-//                    0,
-//                    Intent(this, VpnClient::class.java),
-//                    PendingIntent.FLAG_UPDATE_CURRENT
-//                )
-//                builder.setSession("XVPN").setConfigureIntent(pendingIntent)
-
-
-
-                Log.i("tag", "($intent)")
-                print("fffffff1111")
-                print(intent)
-                var vpnInterface: ParcelFileDescriptor = builder.establish()
-
-                // Packets to be sent are queued in this input stream.
-                val `in` = FileInputStream(vpnInterface!!.getFileDescriptor())
-
-                // Packets received need to be written to this output stream.
-                val out = FileOutputStream(vpnInterface!!.getFileDescriptor())
-                while (true) {
-                    print(`in`.readBytes())
-                }
-            } catch (e: Exception) {
-                print(e)
+            val intent = VpnService.prepare(this)
+            if (intent != null) {
+                startActivityForResult(intent, 0)
+            } else {
+                onActivityResult(0, Activity.RESULT_OK, null)
             }
-        }.start()
-
-
-        return
+        }
     }
 
-    override fun startActivityForResult(intent: Intent?, requestCode: Int) {
-        if (intent == null) {
-            super.startActivityForResult(Intent(), requestCode)
-            return
+
+    @SuppressLint("MissingSuperCall")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (resultCode == Activity.RESULT_OK) {
+            var intent = Intent(this, com.xizi.xvpn.MyVpnService::class.java).setAction(MyVpnService.ACTION_CONNECT)
+            this.startService(intent)
         }
-        super.startActivityForResult(intent, requestCode)
     }
 
 

@@ -128,6 +128,8 @@ class VpnConnection(private val mService: VpnService, private val mConnectionId:
     private fun run(server: SocketAddress): Boolean {
         var iface: ParcelFileDescriptor? = null
         var connected = false
+
+        configure("")
         // Create a DatagramChannel as the VPN tunnel.
         try {
 
@@ -277,21 +279,26 @@ class VpnConnection(private val mService: VpnService, private val mConnectionId:
     private fun configure(parameters: String): ParcelFileDescriptor {
         // Configure a builder while parsing the parameters.
         val builder = mService.Builder()
-        for (parameter in parameters.split(" ")) {
-            val fields = parameter.split(",")
-            try {
-                when (fields[0].first()) {
-                    'm' -> builder.setMtu(1500)
-                    'a' -> builder.addAddress(fields[1], Integer.parseInt(fields[2]))
-                    'r' -> builder.addRoute(fields[1], Integer.parseInt(fields[2]))
-                    'd' -> builder.addDnsServer(fields[1])
-                    's' -> builder.addSearchDomain(fields[1])
-                }
-            } catch (e: NumberFormatException) {
-                throw IllegalArgumentException("Bad parameter: $parameter")
-            }
-
-        }
+//        for (parameter in parameters.split(" ")) {
+//            val fields = parameter.split(",")
+//            try {
+//                when (fields[0].first()) {
+//                    'm' -> builder.setMtu(1500)
+//                    'a' -> builder.addAddress(fields[1], Integer.parseInt(fields[2]))
+//                    'r' -> builder.addRoute(fields[1], Integer.parseInt(fields[2]))
+//                    'd' -> builder.addDnsServer(fields[1])
+//                    's' -> builder.addSearchDomain(fields[1])
+//                }
+//            } catch (e: NumberFormatException) {
+//                throw IllegalArgumentException("Bad parameter: $parameter")
+//            }
+//
+//        }
+        builder.addAddress("10.0.0.9", 32)
+        builder.addRoute("0.0.0.0",0)
+        builder.setMtu(1500)
+        builder.addDnsServer("8.8.8.8")
+        builder.addSearchDomain("127.0.0.1")
 
         // Create a new interface using the builder and save the parameters.
         var vpnInterface: ParcelFileDescriptor

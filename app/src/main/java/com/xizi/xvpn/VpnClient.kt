@@ -16,7 +16,7 @@ import java.util.Collections
 import java.util.stream.Collectors
 
 class VpnClient: Activity() {
-    private val serviceIntent: Intent get() = Intent(this, com.xizi.xvpn.VpnService::class.java)
+    private val serviceIntent: Intent get() = Intent(this, com.xizi.xvpn.MyVpnService::class.java)
     interface Prefs {
         companion object {
             val NAME = "connection"

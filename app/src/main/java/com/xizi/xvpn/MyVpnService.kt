@@ -1,11 +1,10 @@
 package com.xizi.xvpn
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
+import android.app.*
+import android.content.ComponentName
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Handler
 import android.os.Message
@@ -13,13 +12,20 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import android.util.Pair
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 import java.io.IOException
+import java.lang.Exception
+import java.net.Socket
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-class VpnService : VpnService(), Handler.Callback {
+class MyVpnService : VpnService(), Handler.Callback {
+
+    var socket: Socket? = null
 
     private var mHandler: Handler? = null
 
@@ -40,9 +46,10 @@ class VpnService : VpnService(), Handler.Callback {
         }
 
         // Create the intent to "configure" the connection (just start VpnClient.kt).
-        mConfigureIntent = PendingIntent.getActivity(this, 0, Intent(this, VpnClient::class.java),
+        mConfigureIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT)
     }
+
 
     override
     fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -84,9 +91,12 @@ class VpnService : VpnService(), Handler.Callback {
         val port = prefs.getInt(VpnClient.Prefs.SERVER_PORT, 0)
         val proxyHost = prefs.getString(VpnClient.Prefs.PROXY_HOSTNAME, "")
         val proxyPort = prefs.getInt(VpnClient.Prefs.PROXY_PORT, 0)
-        startConnection(VpnConnection(
-            this, mNextConnectionId.getAndIncrement(), server!!, port, secret,
-            proxyHost!!, proxyPort, allow, packages!!))
+
+        createTcpConnection()
+
+//        startConnection(VpnConnection(
+//            this, mNextConnectionId.getAndIncrement(), server!!, port, secret,
+//            proxyHost!!, proxyPort, allow, packages!!))
     }
 
     private fun startConnection(connection: VpnConnection) {
@@ -138,6 +148,62 @@ class VpnService : VpnService(), Handler.Callback {
         stopForeground(true)
     }
 
+
+    fun createTcpConnection() {
+        Thread {
+            try {
+                socket = Socket("10.23.103.134", 8080)
+//                socket = Socket("35.236.153.210", 8080)
+//                var reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
+//                var writer = PrintWriter(socket!!.getOutputStream())
+                var r = socket!!.getInputStream()
+                var w = socket!!.getOutputStream()
+                w.write(int32ByteArray(MainActivity.Prefs.IPLoop))
+                // tcp 写入示例
+                // w.write("hello world".toByteArray())
+                w.flush()
+                // tcp 读取
+//                var buffer = ByteBuffer.allocate(4)
+//                buffer.putInt(Prefs.IPLoop)
+//                var buf = ByteArray(1500)
+//                var count = r.read(buf, 0, 16)
+
+                // vpn configration
+                var builder = this.Builder()
+                builder.addAddress("10.0.0.9", 32)
+                builder.addRoute("0.0.0.0",0)
+                builder.setMtu(1500)
+                builder.addDnsServer("8.8.8.8")
+                builder.addSearchDomain("127.0.0.1")
+
+
+//                var pendingIntent = PendingIntent.getActivity(
+//                    this,
+//                    0,
+//                    Intent(this, VpnClient::class.java),
+//                    PendingIntent.FLAG_UPDATE_CURRENT
+//                )
+                builder.setSession("XVPN").setConfigureIntent(mConfigureIntent!!)
+
+                var vpnInterface: ParcelFileDescriptor = builder.establish()
+
+                // Packets to be sent are queued in this input stream.
+                val `in` = FileInputStream(vpnInterface!!.getFileDescriptor())
+
+                // Packets received need to be written to this output stream.
+                val out = FileOutputStream(vpnInterface!!.getFileDescriptor())
+                while (true) {
+                    print(`in`.readBytes())
+                }
+            } catch (e: Exception) {
+                print(e)
+            }
+        }.start()
+
+
+        return
+    }
+
     private fun updateForegroundNotification(message: Int) {
         val NOTIFICATION_CHANNEL_ID = "ToyVpn"
         val mNotificationManager = getSystemService(
@@ -157,5 +223,15 @@ class VpnService : VpnService(), Handler.Callback {
 
         val ACTION_CONNECT = "com.xizi.xvpn.START"
         val ACTION_DISCONNECT = "com.xizi.xvpn.STOP"
+
+    }
+
+    fun int32ByteArray(value: Int): ByteArray {
+        val bytes = ByteArray(4)
+        bytes[0] = (value and 0xFFFF).toByte()
+        bytes[1] = ((value ushr 8) and 0xFFFF).toByte()
+        bytes[2] = ((value ushr 16) and 0xFFFF).toByte()
+        bytes[3] = ((value ushr 24) and 0xFFFF).toByte()
+        return bytes
     }
 }
