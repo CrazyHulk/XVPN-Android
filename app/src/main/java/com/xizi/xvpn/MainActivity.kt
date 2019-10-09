@@ -21,8 +21,7 @@ import android.net.VpnService
 import androidx.core.app.ComponentActivity.ExtraData
 import androidx.core.content.ContextCompat.getSystemService
 import android.icu.lang.UCharacter.GraphemeClusterBreak.T
-
-
+import androidx.core.app.ActivityCompat
 
 
 class MainActivity : Activity() {
@@ -36,6 +35,8 @@ class MainActivity : Activity() {
 
         button = findViewById(R.id.button)
         button.setOnClickListener {
+            requestPermission()
+
             val intent = VpnService.prepare(this)
             if (intent != null) {
                 startActivityForResult(intent, 0)
@@ -56,40 +57,42 @@ class MainActivity : Activity() {
         }
     }
 
+    fun requestPermission(): Unit {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.BIND_VPN_SERVICE)
+            != PackageManager.PERMISSION_GRANTED) {
+            // Permission is not granted
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, android.Manifest.permission.BIND_VPN_SERVICE)) {
+                Log.i("ff", "111")
 
-    @Throws(IllegalArgumentException::class)
-    private fun configure(parameters: String): ParcelFileDescriptor {
+            } else {
+                var res: Int = 1
+                ActivityCompat.requestPermissions(this,
+                    arrayOf(android.Manifest.permission.CALL_PHONE),
+                    res)
+                print(res)
+            }
 
-        var builder = VpnService().Builder()
-        builder.setMtu(1500)
-        builder.addAddress("10.0.0.1", 32)
-        builder.addRoute("10.0.0.2", 32)
-        builder.addDnsServer("8.8.8.8")
-//        builder.addSearchDomain(fields[1])
-        // Create a new interface using the builder and save the parameters.
-        var vpnInterface: ParcelFileDescriptor
-        vpnInterface = builder.establish()
-//        synchronized(mService) {
-//            vpnInterface = builder.establish()
-//            if (mOnEstablishListener != null) {
-//                mOnEstablishListener!!.onEstablish(vpnInterface)
-//            }
-//        }
-        Log.i("tag ====", "New interface: ($vpnInterface) ($parameters)")
-        return vpnInterface
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, android.Manifest.permission.ACCESS_NETWORK_STATE)) {
+                Log.i("ff", "111")
+
+            }else {
+                var res: Int = 1
+                ActivityCompat.requestPermissions(this,
+                    arrayOf(android.Manifest.permission.ACCESS_NETWORK_STATE),
+                    res)
+                print(res)
+            }
+
+            if (ActivityCompat.shouldShowRequestPermissionRationale(this, android.Manifest.permission.INTERNET)) {
+                Log.i("ff", "111")
+            }else {
+                var res: Int = 1
+                ActivityCompat.requestPermissions(this,
+                    arrayOf(android.Manifest.permission.INTERNET),
+                    res)
+                print(res)
+            }
+        }
     }
 
-    object Prefs {
-        val IPLoop = 0x00010000
-    }
-
-
-    fun int32ByteArray(value: Int): ByteArray {
-        val bytes = ByteArray(4)
-        bytes[0] = (value and 0xFFFF).toByte()
-        bytes[1] = ((value ushr 8) and 0xFFFF).toByte()
-        bytes[2] = ((value ushr 16) and 0xFFFF).toByte()
-        bytes[3] = ((value ushr 24) and 0xFFFF).toByte()
-        return bytes
-    }
 }
