@@ -43,6 +43,8 @@ class MainActivity : Activity() {
             } else {
                 onActivityResult(0, Activity.RESULT_OK, null)
             }
+
+            button.text = "已连接"
         }
     }
 

@@ -13,6 +13,8 @@ import java.io.*
 
 import java.lang.Exception
 import java.net.Socket
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -149,10 +151,16 @@ class MyVpnService : VpnService(), Handler.Callback {
             try {
 //                socket = Socket("10.23.103.134", 8080)
                 socket = Socket("35.236.153.210", 8080)
+                socket!!.sendBufferSize = 44
+                socket!!.keepAlive = true
 //                var reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
 //                var writer = PrintWriter(socket!!.getOutputStream())
-                var sockertReader = socket!!.getInputStream()
+
+                var socketReader = socket!!.getInputStream()
                 var socketWriter = socket!!.getOutputStream()
+//                var socketReader1 = DataInputStream(socket!!.getInputStream())
+
+
                 // tcp 写入示例
                 // w.write("hello world".toByteArray())
 //                w.flush()
@@ -181,34 +189,79 @@ class MyVpnService : VpnService(), Handler.Callback {
 //                    Intent(this, VpnClient::class.java),
 //                    PendingIntent.FLAG_UPDATE_CURRENT
 //                )
-                builder.setSession("XVPN").setConfigureIntent(mConfigureIntent!!)
+                builder.setSession(ips.second).setConfigureIntent(mConfigureIntent!!)
 
                 var vpnInterface: ParcelFileDescriptor = builder.establish()
+                Log.d("new tun interface =======", vpnInterface.toString())
 
-                // Packets to be sent are queued in this input stream.
-                val tunReader = FileInputStream(vpnInterface!!.getFileDescriptor())
 
-                // Packets received need to be written to this output stream.
-                val tunWriter = FileOutputStream(vpnInterface!!.getFileDescriptor())
 
                 var headerBuf = ByteArray(4)
-                var packet = ByteArray(65535)
+                var packet = ByteArray(1500)
+
+                Thread {
+                    while (true) {
+                        if (socket!!.isClosed) {
+                            Log.d("close", "socket")
+                        }
+
+                        val tunWriter = FileOutputStream(vpnInterface!!.getFileDescriptor())
+
+                        var headerByte = ByteArray(4)
+                        var tcpPacket = ByteArray(1500)
+                        var count = socketReader.read(headerByte)
+
+//                    var readCount = ByteBuffer.wrap(headerByte).order(ByteOrder.LITTLE_ENDIAN).getInt()
+
+                        if (count != 0) {
+                            count = socketReader.read(tcpPacket, 0, headerByte.toInt())
+                            Log.d("read tcp count ======", count.toString())
+                            Log.d("read tcp haderbyte count ======", headerByte.toInt().toString())
+                            Log.d("read tcp ======", Arrays.toString(tcpPacket))
+//                        tunWriter.write(packet.copyOfRange(0, headerBuf.toInt()))
+                            tunWriter.write(tcpPacket, 0, headerByte.toInt())
+                        }
+                    }
+                }.start()
+
                 while (true) {
-                    var count = tunReader.read(packet)
-                    Log.d("read tun ======", Arrays.toString(packet))
-                    if (count != 0) {
-                        socketWriter.write(count.toByteArray())
-                        socketWriter.write(packet.copyOfRange(0, count))
+                    if (socket!!.isClosed) {
+                        Log.d("close", "socket")
                     }
 
-                    count = sockertReader.read(headerBuf)
+                    // Packets to be sent are queued in this input stream.
+                    val tunReader = FileInputStream(vpnInterface!!.getFileDescriptor())
+
+                    // Packets received need to be written to this output stream.
+                    val tunWriter = FileOutputStream(vpnInterface!!.getFileDescriptor())
+
+//                    ByteBuffer.wrap(headerBuf).order(ByteOrder.LITTLE_ENDIAN).array()
+                    var count = tunReader.read(packet)
+                    Log.d("read tun ======", Arrays.toString(packet))
+                    Log.d("read tun count ======", packet.size.toString())
                     if (count != 0) {
-                        count = sockertReader.read(packet)
-                        Log.d("read tcp count ======", headerBuf.toInt().toString())
-                        Log.d("read tcp ======", Arrays.toString(packet))
-                        tunWriter.write(packet.copyOfRange(0, headerBuf.toInt()))
+//                        socketWriter.write(count.toByteArray())
+//                        socketWriter.write(packet.copyOfRange(0, count))
+                        socketWriter.write(count)
+                        socketWriter.write(packet, 0, count)
                     }
+
+//                    var headerByte = ByteArray(4)
+//                    var tcpPacket = ByteArray(1500)
+//                    count = socketReader.read(headerByte)
+//
+////                    var readCount = ByteBuffer.wrap(headerByte).order(ByteOrder.LITTLE_ENDIAN).getInt()
+//
+//                    if (count != 0) {
+//                        count = socketReader.read(tcpPacket, 0, headerByte.toInt())
+//                        Log.d("read tcp count ======", count.toString())
+//                        Log.d("read tcp haderbyte count ======", headerByte.toInt().toString())
+//                        Log.d("read tcp ======", Arrays.toString(tcpPacket))
+////                        tunWriter.write(packet.copyOfRange(0, headerBuf.toInt()))
+//                        tunWriter.write(tcpPacket, 0, headerByte.toInt())
+//                    }
                 }
+
             } catch (e: Exception) {
                 print(e)
             }
@@ -221,8 +274,8 @@ class MyVpnService : VpnService(), Handler.Callback {
     fun loopAddress(connection: Socket): Pair<String1, String1>{
         val w = socket!!.getOutputStream()
 
-        var ipLoop = Prefs.IPLoop.toByteArray()
-        w.write(ipLoop)
+//        var ipLoop = Prefs.IPLoop.toByteArray()
+//        w.write(ipLoop)
         val r = socket!!.getInputStream()
         var packet = ByteArray(4)
         r.read(packet)
@@ -265,10 +318,10 @@ class MyVpnService : VpnService(), Handler.Callback {
 
     fun Int.toByteArray(): ByteArray {
         val bytes = ByteArray(4)
-        bytes[3] = (this and 0x000000FF.toInt()).toByte()
-        bytes[2] = (this and 0x0000FF00.toInt() ushr 8).toByte()
-        bytes[1] = (this and 0x00FF0000.toInt() ushr 16).toByte()
-        bytes[0] = (this and 0xFF000000.toInt() ushr 24).toByte()
+        bytes[0] = (this and 0x000000FF.toInt()).toByte()
+        bytes[1] = ((this and 0x0000FF00.toInt()) ushr 8).toByte()
+        bytes[2] = ((this and 0x00FF0000.toInt()) ushr 16).toByte()
+        bytes[3] = ((this and 0xFF000000.toInt()) ushr 24).toByte()
         return bytes
     }
 
