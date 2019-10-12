@@ -12,17 +12,16 @@ import android.widget.Toast
 import java.io.*
 
 import java.lang.Exception
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import java.nio.channels.SocketChannel
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.String as String1
 
 class MyVpnService : VpnService(), Handler.Callback {
-
-    var socket: Socket? = null
 
     private var mHandler: Handler? = null
 
@@ -33,7 +32,94 @@ class MyVpnService : VpnService(), Handler.Callback {
 
     private var mConfigureIntent: PendingIntent? = null
 
-    private class Connection(thread: Thread, pfd: ParcelFileDescriptor) : Pair<Thread, ParcelFileDescriptor>(thread, pfd)
+    private class Connection(thread: Thread, pfd: ParcelFileDescriptor) :
+        Pair<Thread, ParcelFileDescriptor>(thread, pfd)
+
+    fun loopAddressNIO(connection: SocketChannel): Pair<String1, String1> {
+        var byteBuffer = ByteBuffer.allocate(12)
+        val r = connection.read(byteBuffer)
+
+        if (byteBuffer.array().copyOfRange(0, 4).toInt() != Prefs.IPLoop) {
+            return Pair("", "")
+        }
+
+        return Pair(
+            byteBuffer.array().copyOfRange(4, 8).toIP(),
+            byteBuffer.array().copyOfRange(8, 12).toIP()
+        )
+    }
+
+    fun startNIOSocket(): Unit {
+        Thread {
+            try {
+                var address = InetSocketAddress("35.236.153.210", 8080)
+//                var address = InetSocketAddress("10.23.103.134", 8080)
+                SocketChannel.open(address).use { conn ->
+                    val ips = loopAddressNIO(conn)
+                    if (!this.protect(conn.socket())) {
+                        throw IllegalStateException("Cannot protect the tunnel")
+                    }
+                    conn.configureBlocking(false)
+                    // vpn configration
+                    var builder = this.Builder()
+
+//                builder.addAddress(ips.second, 32)
+                    builder.addAddress(ips.second, 32)
+//                    builder.addAddress("10.0.0.8", 32)
+
+                    builder.addRoute("0.0.0.0", 0)
+                    builder.setMtu(1500)
+                    builder.addDnsServer("8.8.8.8")
+
+//                    builder.setSession("10.0.0.8").setConfigureIntent(mConfigureIntent!!)
+
+                    builder.setSession(ips.second).setConfigureIntent(mConfigureIntent!!)
+
+
+                    var vpnInterface: ParcelFileDescriptor = builder.establish()
+
+                    // Packets to be sent are queued in this input stream.
+                    val tunReader = FileInputStream(vpnInterface!!.getFileDescriptor())
+
+                    // Packets received need to be written to this output stream.
+                    val tunWriter = FileOutputStream(vpnInterface!!.getFileDescriptor())
+
+                    val buf = ByteBuffer.allocate(1500)
+
+                    while (true) {
+                        var needIdle = true
+                        var count = tunReader.read(buf.array())
+                        if (count > 0) {
+                            needIdle = false
+                            buf.limit(count)
+                            conn.write(ByteBuffer.wrap(count.toByteArray()))
+                            conn.write(buf)
+                            buf.clear()
+                        }
+
+                        var headerBuf = ByteBuffer.allocate(4)
+                        count = conn.read(headerBuf)
+                        if (count > 0) {
+//                            conn.configureBlocking(true)
+                            count = headerBuf.array().toInt()
+                            buf.limit(count)
+                            conn.read(buf)
+                            tunWriter.write(buf.array())
+                            buf.clear()
+                            needIdle = false
+                        }
+
+                        if (needIdle) {
+                            Thread.sleep(100)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                print(e)
+            }
+        }.start()
+
+    }
 
     override
     fun onCreate() {
@@ -43,8 +129,10 @@ class MyVpnService : VpnService(), Handler.Callback {
         }
 
         // Create the intent to "configure" the connection (just start VpnClient.kt).
-        mConfigureIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT)
+        mConfigureIntent = PendingIntent.getActivity(
+            this, 0, Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT
+        )
     }
 
 
@@ -89,7 +177,8 @@ class MyVpnService : VpnService(), Handler.Callback {
         val proxyHost = prefs.getString(VpnClient.Prefs.PROXY_HOSTNAME, "")
         val proxyPort = prefs.getInt(VpnClient.Prefs.PROXY_PORT, 0)
 
-        createTcpConnection()
+//        startNIOSocket()
+        socketStart()
 
 //        startConnection(VpnConnection(
 //            this, mNextConnectionId.getAndIncrement(), server!!, port, secret,
@@ -98,7 +187,7 @@ class MyVpnService : VpnService(), Handler.Callback {
 
     private fun startConnection(connection: VpnConnection) {
         // Replace any existing connecting thread with the  new one.
-        val thread = Thread(connection, "ToyVpnThread")
+        val thread = Thread(connection, "VpnThread")
         setConnectingThread(thread)
 
         // Handler to mark as connected once onEstablish is called.
@@ -145,121 +234,99 @@ class MyVpnService : VpnService(), Handler.Callback {
         stopForeground(true)
     }
 
-
-    fun createTcpConnection() {
+    private fun socketStart() {
         Thread {
             try {
-//                socket = Socket("10.23.103.134", 8080)
-                socket = Socket("35.236.153.210", 8080)
-                socket!!.sendBufferSize = 44
-                socket!!.keepAlive = true
-//                var reader = BufferedReader(InputStreamReader(socket!!.getInputStream()))
-//                var writer = PrintWriter(socket!!.getOutputStream())
+//            var socket = Socket("10.23.103.134", 8080)
+                val socket = Socket("35.236.153.210", 8080)
+                socket.keepAlive = true
+                socket.tcpNoDelay = true
+                socket.reuseAddress = true
+                if (!this.protect(socket)) {
+                    throw IllegalStateException("Cannot protect the tunnel")
+                }
 
-                var socketReader = socket!!.getInputStream()
-                var socketWriter = socket!!.getOutputStream()
-//                var socketReader1 = DataInputStream(socket!!.getInputStream())
+                var socketReader = DataInputStream(socket.getInputStream())
+                var socketWriter = DataOutputStream(socket.getOutputStream())
 
-
-                // tcp 写入示例
-                // w.write("hello world".toByteArray())
-//                w.flush()
-                // tcp 读取
-//                var buffer = ByteBuffer.allocate(4)
-//                buffer.putInt(Prefs.IPLoop)
-//                var buf = ByteArray(1500)
-//                var count = r.read(buf, 0, 16)
-                val ips = loopAddress(socket!!)
+                val ips = loopAddress(socket)
 
                 Log.d("ip address ====", ips.first)
                 Log.d("ip address ====", ips.second)
+                mHandler!!.sendEmptyMessage(R.string.connected)
 
                 // vpn configration
                 var builder = this.Builder()
                 builder.addAddress(ips.second, 32)
-                builder.addRoute("0.0.0.0",0)
+//            builder.addAddress("10.0.0.8", 32)
+                builder.addRoute("0.0.0.0", 0)
                 builder.setMtu(1500)
                 builder.addDnsServer("8.8.8.8")
 //                builder.addSearchDomain("127.0.0.1")
 
-
-//                var pendingIntent = PendingIntent.getActivity(
-//                    this,
-//                    0,
-//                    Intent(this, VpnClient::class.java),
-//                    PendingIntent.FLAG_UPDATE_CURRENT
-//                )
                 builder.setSession(ips.second).setConfigureIntent(mConfigureIntent!!)
 
                 var vpnInterface: ParcelFileDescriptor = builder.establish()
                 Log.d("new tun interface =======", vpnInterface.toString())
 
+//                // Packets to be sent are queued in this input stream.
+//                val tunReader = FileInputStream(vpnInterface!!.getFileDescriptor())
 
+                // Packets received need to be written to this output stream.
+//                val tunWriter = FileOutputStream(vpnInterface!!.getFileDescriptor())
 
-                var headerBuf = ByteArray(4)
-                var packet = ByteArray(1500)
+//                var headerBuf = ByteArray(4)
+//                var packet = ByteArray(1500)
 
+                // 读取 tcp 数据 -> tun interface
                 Thread {
                     while (true) {
-                        if (socket!!.isClosed) {
-                            Log.d("close", "socket")
-                        }
-
                         val tunWriter = FileOutputStream(vpnInterface!!.getFileDescriptor())
+                        // 自定义协议头
+                        var header = ByteArray(4)
+                        var tcpPacket = ByteArray(2500)
+                        var count = socketReader.read(header, 0, 4)
 
-                        var headerByte = ByteArray(4)
-                        var tcpPacket = ByteArray(1500)
-                        var count = socketReader.read(headerByte)
+                        if (count == -1) {
+                            Log.d("tcp read EOF", "")
+                        }
+                        if (count > 0) {
+                            val len = header.toInt()
 
-//                    var readCount = ByteBuffer.wrap(headerByte).order(ByteOrder.LITTLE_ENDIAN).getInt()
-
-                        if (count != 0) {
-                            count = socketReader.read(tcpPacket, 0, headerByte.toInt())
+                            if (len > 1500 || len < 0) {
+                                Log.d("header ======", Arrays.toString(header))
+                                Log.d("header value ======", len.toString())
+                                continue
+                            }
+                            count = socketReader.read(tcpPacket, 0, len)
+                            while (count < len) {
+                                val left = socketReader.read(tcpPacket, count, len - count)
+                                count += left
+                            }
                             Log.d("read tcp count ======", count.toString())
-                            Log.d("read tcp haderbyte count ======", headerByte.toInt().toString())
+                            Log.d(
+                                "read tcp header byte count ======",
+                                header.toInt().toString()
+                            )
                             Log.d("read tcp ======", Arrays.toString(tcpPacket))
-//                        tunWriter.write(packet.copyOfRange(0, headerBuf.toInt()))
-                            tunWriter.write(tcpPacket, 0, headerByte.toInt())
+                            tunWriter.write(tcpPacket, 0, count)
+                        } else {
+                            Thread.sleep(2000)
                         }
                     }
                 }.start()
 
+                // 读取 tun interface 数据 -> tcp
                 while (true) {
-                    if (socket!!.isClosed) {
-                        Log.d("close", "socket")
-                    }
-
                     // Packets to be sent are queued in this input stream.
                     val tunReader = FileInputStream(vpnInterface!!.getFileDescriptor())
+                    var tcpPacket = ByteArray(1500)
+                    var count = tunReader.read(tcpPacket)
 
-                    // Packets received need to be written to this output stream.
-                    val tunWriter = FileOutputStream(vpnInterface!!.getFileDescriptor())
-
-//                    ByteBuffer.wrap(headerBuf).order(ByteOrder.LITTLE_ENDIAN).array()
-                    var count = tunReader.read(packet)
-                    Log.d("read tun ======", Arrays.toString(packet))
-                    Log.d("read tun count ======", packet.size.toString())
-                    if (count != 0) {
-//                        socketWriter.write(count.toByteArray())
-//                        socketWriter.write(packet.copyOfRange(0, count))
-                        socketWriter.write(count)
-                        socketWriter.write(packet, 0, count)
+                    if (count > 0) {
+                        socketWriter.write(count.toByteArray())
+                        socketWriter.write(tcpPacket, 0, count)
                     }
-
-//                    var headerByte = ByteArray(4)
-//                    var tcpPacket = ByteArray(1500)
-//                    count = socketReader.read(headerByte)
-//
-////                    var readCount = ByteBuffer.wrap(headerByte).order(ByteOrder.LITTLE_ENDIAN).getInt()
-//
-//                    if (count != 0) {
-//                        count = socketReader.read(tcpPacket, 0, headerByte.toInt())
-//                        Log.d("read tcp count ======", count.toString())
-//                        Log.d("read tcp haderbyte count ======", headerByte.toInt().toString())
-//                        Log.d("read tcp ======", Arrays.toString(tcpPacket))
-////                        tunWriter.write(packet.copyOfRange(0, headerBuf.toInt()))
-//                        tunWriter.write(tcpPacket, 0, headerByte.toInt())
-//                    }
                 }
 
             } catch (e: Exception) {
@@ -271,12 +338,9 @@ class MyVpnService : VpnService(), Handler.Callback {
         return
     }
 
-    fun loopAddress(connection: Socket): Pair<String1, String1>{
-        val w = socket!!.getOutputStream()
-
-//        var ipLoop = Prefs.IPLoop.toByteArray()
-//        w.write(ipLoop)
-        val r = socket!!.getInputStream()
+    // 获取客户端 ip 地址
+    fun loopAddress(connection: Socket): Pair<String1, String1> {
+        val r = connection.getInputStream()
         var packet = ByteArray(4)
         r.read(packet)
 
@@ -286,21 +350,27 @@ class MyVpnService : VpnService(), Handler.Callback {
 
         var IPs = ByteArray(8)
         r.read(IPs)
-        return Pair(IPs.copyOfRange(0,4).toIP(), IPs.copyOfRange(4,8).toIP())
+        return Pair(IPs.copyOfRange(0, 4).toIP(), IPs.copyOfRange(4, 8).toIP())
     }
 
     private fun updateForegroundNotification(message: Int) {
         val NOTIFICATION_CHANNEL_ID = "ToyVpn"
         val mNotificationManager = getSystemService(
-            NOTIFICATION_SERVICE) as NotificationManager
-        mNotificationManager.createNotificationChannel(NotificationChannel(
-            NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_ID,
-            NotificationManager.IMPORTANCE_DEFAULT))
-        startForeground(1, Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
+            NOTIFICATION_SERVICE
+        ) as NotificationManager
+        mNotificationManager.createNotificationChannel(
+            NotificationChannel(
+                NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_ID,
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+        )
+        startForeground(
+            1, Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
 //            .setSmallIcon(R.drawable.ic_vpn)
-            .setContentText(getString(message))
-            .setContentIntent(mConfigureIntent)
-            .build())
+                .setContentText(getString(message))
+                .setContentIntent(mConfigureIntent)
+                .build()
+        )
     }
 
     companion object {
@@ -325,18 +395,23 @@ class MyVpnService : VpnService(), Handler.Callback {
         return bytes
     }
 
+    @ExperimentalUnsignedTypes
     fun ByteArray.toInt(): Int {
-        if (count() < 4) { return 0 }
+        if (count() < 4) {
+            return 0
+        }
 
-        val one = this[0].toInt()
-        var two = this[1].toInt().shl(8)
-        var three = this[2].toInt().shl(16)
-        var four = this[3].toInt().shl(24)
+        val one = this[0].toUByte().toInt()
+        val two = this[1].toUByte().toInt().shl(8)
+        val three = this[2].toUByte().toInt().shl(16)
+        val four = this[3].toUByte().toInt().shl(24)
         return one or two or three or four
     }
 
     fun ByteArray.toIP(): String1 {
-        if (count() < 4) { return "0.0.0.0" }
+        if (count() < 4) {
+            return "0.0.0.0"
+        }
 
 //        return this[0].toUInt().toString() + this[1].toUInt().toString() + this[2].toUInt().toString() + this[3].toUInt().toString()
         return "${this[0].toUByte()}.${this[1].toUByte()}.${this[2].toUByte()}.${this[3].toUByte()}"

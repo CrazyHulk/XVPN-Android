@@ -46,6 +46,7 @@ class MainActivity : Activity() {
 
             button.text = "已连接"
         }
+
     }
 
 
@@ -96,5 +97,4 @@ class MainActivity : Activity() {
             }
         }
     }
-
 }

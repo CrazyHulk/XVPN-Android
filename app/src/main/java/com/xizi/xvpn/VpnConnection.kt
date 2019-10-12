@@ -133,8 +133,7 @@ class VpnConnection(private val mService: VpnService, private val mConnectionId:
         // Create a DatagramChannel as the VPN tunnel.
         try {
 
-            DatagramChannel.open().use({ tunnel ->
-
+            DatagramChannel.open().use { tunnel ->
                 // Protect the tunnel before connecting to avoid loopback.
                 if (!mService.protect(tunnel.socket())) {
                     throw IllegalStateException("Cannot protect the tunnel")
@@ -223,7 +222,7 @@ class VpnConnection(private val mService: VpnService, private val mConnectionId:
                         }
                     }
                 }
-            })
+            }
         } catch (e: SocketException) {
             Log.e(tag, "Cannot use socket", e)
         } finally {
