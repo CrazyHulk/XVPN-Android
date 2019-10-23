@@ -49,6 +49,7 @@ class MyVpnService : VpnService(), Handler.Callback {
         )
     }
 
+    // NIO 版
     fun startNIOSocket(): Unit {
         Thread {
             try {
@@ -179,33 +180,23 @@ class MyVpnService : VpnService(), Handler.Callback {
 
 //        startNIOSocket()
         socketStart()
-
-//        startConnection(VpnConnection(
-//            this, mNextConnectionId.getAndIncrement(), server!!, port, secret,
-//            proxyHost!!, proxyPort, allow, packages!!))
     }
 
-    private fun startConnection(connection: VpnConnection) {
-        // Replace any existing connecting thread with the  new one.
-        val thread = Thread(connection, "VpnThread")
-        setConnectingThread(thread)
-
-        // Handler to mark as connected once onEstablish is called.
-        connection.setConfigureIntent(mConfigureIntent!!)
-        connection.setFnOnEstablishListener { tunInterface ->
-            mHandler!!.sendEmptyMessage(R.string.connected)
-
-            mConnectingThread.compareAndSet(thread, null)
-            setConnection(Connection(thread, tunInterface))
-        }
-//        connection.setOnEstablishListener({ tunInterface ->
+//    private fun startConnection(connection: VpnConnection) {
+//        // Replace any existing connecting thread with the  new one.
+//        val thread = Thread(connection, "VpnThread")
+//        setConnectingThread(thread)
+//
+//        // Handler to mark as connected once onEstablish is called.
+//        connection.setConfigureIntent(mConfigureIntent!!)
+//        connection.setFnOnEstablishListener { tunInterface ->
 //            mHandler!!.sendEmptyMessage(R.string.connected)
 //
 //            mConnectingThread.compareAndSet(thread, null)
 //            setConnection(Connection(thread, tunInterface))
-//        })
-        thread.start()
-    }
+//        }
+//        thread.start()
+//    }
 
     private fun setConnectingThread(thread: Thread?) {
         val oldThread = mConnectingThread.getAndSet(thread)
@@ -234,6 +225,7 @@ class MyVpnService : VpnService(), Handler.Callback {
         stopForeground(true)
     }
 
+    // 插网线
     private fun socketStart() {
         Thread {
             try {
@@ -274,10 +266,6 @@ class MyVpnService : VpnService(), Handler.Callback {
 
                 // Packets received need to be written to this output stream.
 //                val tunWriter = FileOutputStream(vpnInterface!!.getFileDescriptor())
-
-//                var headerBuf = ByteArray(4)
-//                var packet = ByteArray(1500)
-
                 // 读取 tcp 数据 -> tun interface
                 Thread {
                     while (true) {
@@ -299,16 +287,12 @@ class MyVpnService : VpnService(), Handler.Callback {
                                 continue
                             }
                             count = socketReader.read(tcpPacket, 0, len)
+                            // 读到长度为 len 为止
                             while (count < len) {
                                 val left = socketReader.read(tcpPacket, count, len - count)
                                 count += left
                             }
-                            Log.d("read tcp count ======", count.toString())
-                            Log.d(
-                                "read tcp header byte count ======",
-                                header.toInt().toString()
-                            )
-                            Log.d("read tcp ======", Arrays.toString(tcpPacket))
+
                             tunWriter.write(tcpPacket, 0, count)
                         } else {
                             Thread.sleep(2000)

@@ -35,7 +35,6 @@ class MainActivity : Activity() {
 
         button = findViewById(R.id.button)
         button.setOnClickListener {
-            requestPermission()
 
             val intent = VpnService.prepare(this)
             if (intent != null) {
@@ -60,41 +59,4 @@ class MainActivity : Activity() {
         }
     }
 
-    fun requestPermission(): Unit {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.BIND_VPN_SERVICE)
-            != PackageManager.PERMISSION_GRANTED) {
-            // Permission is not granted
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, android.Manifest.permission.BIND_VPN_SERVICE)) {
-                Log.i("ff", "111")
-
-            } else {
-                var res: Int = 1
-                ActivityCompat.requestPermissions(this,
-                    arrayOf(android.Manifest.permission.CALL_PHONE),
-                    res)
-                print(res)
-            }
-
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, android.Manifest.permission.ACCESS_NETWORK_STATE)) {
-                Log.i("ff", "111")
-
-            }else {
-                var res: Int = 1
-                ActivityCompat.requestPermissions(this,
-                    arrayOf(android.Manifest.permission.ACCESS_NETWORK_STATE),
-                    res)
-                print(res)
-            }
-
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, android.Manifest.permission.INTERNET)) {
-                Log.i("ff", "111")
-            }else {
-                var res: Int = 1
-                ActivityCompat.requestPermissions(this,
-                    arrayOf(android.Manifest.permission.INTERNET),
-                    res)
-                print(res)
-            }
-        }
-    }
 }
