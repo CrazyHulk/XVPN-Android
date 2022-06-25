@@ -53,7 +53,7 @@ class MyVpnService : VpnService(), Handler.Callback {
     fun startNIOSocket(): Unit {
         Thread {
             try {
-                var address = InetSocketAddress("35.236.153.210", 8080)
+                var address = InetSocketAddress("47.101.191.9", 8080)
 //                var address = InetSocketAddress("10.23.103.134", 8080)
                 SocketChannel.open(address).use { conn ->
                     val ips = loopAddressNIO(conn)
@@ -230,7 +230,7 @@ class MyVpnService : VpnService(), Handler.Callback {
         Thread {
             try {
 //            var socket = Socket("10.23.103.134", 8080)
-                val socket = Socket("35.236.153.210", 8080)
+                val socket = Socket("47.101.191.9", 8080)
                 socket.keepAlive = true
                 socket.tcpNoDelay = true
                 socket.reuseAddress = true
@@ -324,6 +324,10 @@ class MyVpnService : VpnService(), Handler.Callback {
 
     // 获取客户端 ip 地址
     fun loopAddress(connection: Socket): Pair<String1, String1> {
+        val w = connection.getOutputStream()
+        w.write(Prefs.IPLoop.toByteArray())
+        w.flush()
+
         val r = connection.getInputStream()
         var packet = ByteArray(4)
         r.read(packet)
